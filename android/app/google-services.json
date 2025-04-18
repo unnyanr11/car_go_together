@@ -1,0 +1,46 @@
+{
+  "project_info": {
+    "project_number": "52407280080",
+    "project_id": "cargotogether-64379",
+    "storage_bucket": "cargotogether-64379.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:52407280080:android:14c6ae5cc00bd4e6d019d5",
+        "android_client_info": {
+          "package_name": "com.example.car_go_together"
+        }
+      },
+      "oauth_client": [
+        {
+          "client_id": "52407280080-dm6055lg4t3lgf49f3n5o2jmnefhdjeg.apps.googleusercontent.com",
+          "client_type": 3
+        }
+      ],
+      "api_key": [
+        {
+          "current_key": "AIzaSyCqL6KHeRMXKeRf5YE8oWTrnPY5i635BVc"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": [
+            {
+              "client_id": "52407280080-dm6055lg4t3lgf49f3n5o2jmnefhdjeg.apps.googleusercontent.com",
+              "client_type": 3
+            },
+            {
+              "client_id": "52407280080-ddj9vgccsjtucfng9m4ldu8d8bp0nkgf.apps.googleusercontent.com",
+              "client_type": 2,
+              "ios_info": {
+                "bundle_id": "com.example.carGoTogether"
+              }
+            }
+          ]
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}
