@@ -107,7 +107,7 @@ class _WalletScreenState extends State<WalletScreen> {
           id: userId,
           name: displayName, // Fixed: using name instead of fullName
           email: email,
-          phone: '+92300000000', // Fixed: using phone instead of phoneNumber
+          phone: '+913000000000', // Fixed: using phone instead of phoneNumber
           createdAt: DateTime.now().subtract(const Duration(days: 30)),
           walletBalance: 1500,
           profileImageUrl: null,
@@ -133,7 +133,7 @@ class _WalletScreenState extends State<WalletScreen> {
               controller: amountController,
               keyboardType: TextInputType.number,
               decoration: const InputDecoration(
-                labelText: 'Amount (PKR)',
+                labelText: 'Amount (INR)',
                 border: OutlineInputBorder(),
               ),
             ),
@@ -285,8 +285,8 @@ class _WalletScreenState extends State<WalletScreen> {
         if (mounted) {
           ScaffoldMessenger.of(context).showSnackBar(
             SnackBar(
-              content: Text('Added $amount PKR to your wallet'),
-              backgroundColor: AppColors.success,
+              content: Text('Added $amount INR to your wallet'),
+              backgroundColor: const Color(0xFFF5790C),
             ),
           );
         }
@@ -394,7 +394,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                 ),
                                 const SizedBox(height: 8),
                                 Text(
-                                  '${_user?.walletBalance.toInt() ?? 0} PKR',
+                                  '${_user?.walletBalance.toInt() ?? 0} INR',
                                   style: const TextStyle(
                                     color: Colors.white,
                                     fontSize: 32,
@@ -506,7 +506,7 @@ class _WalletScreenState extends State<WalletScreen> {
                                         ),
                                       ),
                                       trailing: Text(
-                                        '${isCredit ? '+' : '-'}${transaction['amount']} PKR',
+                                        '${isCredit ? '+' : '-'}${transaction['amount']} INR',
                                         style: TextStyle(
                                           fontWeight: FontWeight.bold,
                                           color: isCredit

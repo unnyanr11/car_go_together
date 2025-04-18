@@ -277,7 +277,7 @@ class _HomeScreenState extends State<HomeScreen> {
           GoogleMap(
             onMapCreated: _onMapCreated,
             initialCameraPosition: const CameraPosition(
-              target: LatLng(24.8607, 67.0011), // Karachi coordinates
+              target: LatLng(23.0775, 76.8513), // Karachi coordinates
               zoom: 12,
             ),
             myLocationEnabled: true,
