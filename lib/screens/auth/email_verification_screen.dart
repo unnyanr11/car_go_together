@@ -1,10 +1,10 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:firebase_auth/firebase_auth.dart';
-import 'package:go_router/go_router.dart'; // Add this import
+import 'package:go_router/go_router.dart';
 
 import '../../constants/app_colors.dart';
-import '../../routes.dart'; // Ensure you have your routes defined here
+import '../../routes.dart';
 
 class EmailVerificationScreen extends StatefulWidget {
   final String email;
@@ -20,13 +20,18 @@ class EmailVerificationScreen extends StatefulWidget {
   EmailVerificationScreenState createState() => EmailVerificationScreenState();
 }
 
-class EmailVerificationScreenState extends State<EmailVerificationScreen> {
+class EmailVerificationScreenState extends State<EmailVerificationScreen>
+    with SingleTickerProviderStateMixin {
   // Verification timer for rapid checks
   Timer? _verificationTimer;
 
+  // Animation controller for continuous progress
+  late AnimationController _animationController;
+
   // State variables
   bool _isVerifying = false;
-  bool _canResendEmail = false;
+  bool _emailSent = false;
+  bool _canResendEmail = true;
   int _remainingSeconds = 60;
 
   // Countdown timer for resend email
@@ -34,52 +39,117 @@ class EmailVerificationScreenState extends State<EmailVerificationScreen> {
 
   // Verification attempts tracker
   int _verificationAttempts = 0;
-  static const int _maxVerificationAttempts = 100; // Prevent infinite checking
+  static const int _maxVerificationAttempts = 100;
 
   @override
   void initState() {
     super.initState();
-
-    // Start automatic verification checks
-    _startRapidVerificationCheck();
-
-    // Initialize resend email countdown
-    _startResendCountdown();
+    // Initialize animation controller
+    _animationController = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 2),
+    )..repeat();
   }
 
-  void _startRapidVerificationCheck() {
-    _verificationTimer = Timer.periodic(
-        const Duration(milliseconds: 2500), // Slightly reduced frequency
-        (_) {
-      // Prevent excessive checking
-      if (_verificationAttempts >= _maxVerificationAttempts) {
-        _verificationTimer?.cancel();
-        _showMaxAttemptsDialog();
-        return;
+  @override
+  void dispose() {
+    // Cancel all timers to prevent memory leaks
+    _verificationTimer?.cancel();
+    _resendCountdownTimer?.cancel();
+    // Dispose animation controller
+    _animationController.dispose();
+    super.dispose();
+  }
+
+  Future<void> _sendVerificationEmail() async {
+    if (!_canResendEmail) return;
+
+    try {
+      setState(() {
+        _isVerifying = true;
+        _canResendEmail = false;
+        _emailSent = false;
+      });
+
+      // Get current user
+      User? user = FirebaseAuth.instance.currentUser;
+
+      if (user != null) {
+        // Send verification email
+        await user.sendEmailVerification();
+
+        // Start verification check
+        _startVerificationCheck();
+
+        setState(() {
+          _emailSent = true;
+          _startResendCountdown();
+        });
+
+        _showSnackBar(
+          'Verification email sent',
+          isError: false,
+        );
       }
-
-      _checkEmailVerification();
-    });
+    } catch (e) {
+      _showSnackBar(
+        'Failed to send verification email: ${e.toString()}',
+        isError: true,
+      );
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isVerifying = false;
+        });
+      }
+    }
   }
 
-  void _showMaxAttemptsDialog() {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Verification Failed'),
-        content: const Text(
-            'Maximum verification attempts reached. Please try again later.'),
-        actions: [
-          TextButton(
-            onPressed: () {
-              // Use GoRouter for navigation
-              context.go(AppRoutes.login);
-            },
-            child: const Text('OK'),
-          ),
-        ],
-      ),
+  void _startVerificationCheck() {
+    _verificationTimer?.cancel();
+    _verificationAttempts = 0;
+
+    _verificationTimer = Timer.periodic(
+      const Duration(seconds: 5),
+      (_) {
+        if (_verificationAttempts >= _maxVerificationAttempts) {
+          _verificationTimer?.cancel();
+          _showMaxAttemptsDialog();
+          return;
+        }
+
+        _checkEmailVerification();
+      },
     );
+  }
+
+  Future<void> _checkEmailVerification() async {
+    if (_isVerifying) return;
+
+    try {
+      setState(() {
+        _isVerifying = true;
+        _verificationAttempts++;
+      });
+
+      // Reload current user
+      User? user = FirebaseAuth.instance.currentUser;
+      await user?.reload();
+
+      // Check if email is verified
+      if (user != null && user.emailVerified) {
+        _verificationTimer?.cancel();
+        await _navigateToHomeScreen();
+      }
+    } catch (e) {
+      debugPrint('Verification check error: $e');
+    } finally {
+      if (mounted) {
+        setState(() {
+          _isVerifying = false;
+        });
+      }
+    }
   }
 
   void _startResendCountdown() {
@@ -100,88 +170,33 @@ class EmailVerificationScreenState extends State<EmailVerificationScreen> {
     });
   }
 
-  Future<void> _checkEmailVerification() async {
-    // Prevent multiple simultaneous checks
-    if (_isVerifying) return;
-
-    try {
-      setState(() {
-        _isVerifying = true;
-        _verificationAttempts++;
-      });
-
-      // Get current user and reload
-      final user = FirebaseAuth.instance.currentUser;
-      await user?.reload();
-
-      // Check verification status
-      if (user != null && user.emailVerified) {
-        // Stop verification timer
-        _verificationTimer?.cancel();
-
-        // Navigate to home screen
-        await _navigateToHomeScreen();
-      }
-    } catch (e) {
-      // Use conditional logging for debug builds
-      assert(() {
-        debugPrint('Verification check error: $e');
-        return true;
-      }());
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isVerifying = false;
-        });
-      }
-    }
-  }
-
   Future<void> _navigateToHomeScreen() async {
-    // Call verification complete callback if provided
+    // Call the verification complete callback if provided
     widget.onVerificationComplete?.call();
 
     if (mounted) {
-      // Use GoRouter for navigation
       context.go(AppRoutes.home);
     }
   }
 
-  Future<void> _resendVerificationEmail() async {
-    // Check if email can be resent
-    if (!_canResendEmail) return;
-
-    try {
-      setState(() {
-        _isVerifying = true;
-        _canResendEmail = false;
-        _verificationAttempts = 0; // Reset attempts
-      });
-
-      // Send verification email
-      await FirebaseAuth.instance.currentUser?.sendEmailVerification();
-
-      // Show success snackbar
-      _showSnackBar(
-        'Verification email resent',
-        isError: false,
-      );
-
-      // Restart resend countdown
-      _startResendCountdown();
-    } catch (e) {
-      // Show error snackbar
-      _showSnackBar(
-        'Failed to resend verification email: $e',
-        isError: true,
-      );
-    } finally {
-      if (mounted) {
-        setState(() {
-          _isVerifying = false;
-        });
-      }
-    }
+  void _showMaxAttemptsDialog() {
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Verification Failed'),
+        content: const Text(
+          'Maximum verification attempts reached. Please try again later.',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () {
+              context.go(AppRoutes.login);
+            },
+            child: const Text('OK'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _showSnackBar(String message, {bool isError = true}) {
@@ -196,23 +211,14 @@ class EmailVerificationScreenState extends State<EmailVerificationScreen> {
   void _logout() async {
     await FirebaseAuth.instance.signOut();
     if (mounted) {
-      // Use GoRouter for navigation
       context.go(AppRoutes.login);
     }
   }
 
   @override
-  void dispose() {
-    // Cancel all timers to prevent memory leaks
-    _verificationTimer?.cancel();
-    _resendCountdownTimer?.cancel();
-    super.dispose();
-  }
-
-  @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false, // Prevent back navigation
+      canPop: false,
       child: Scaffold(
         appBar: AppBar(
           title: const Text('Verify Email'),
@@ -245,55 +251,102 @@ class EmailVerificationScreenState extends State<EmailVerificationScreen> {
                 ),
                 const SizedBox(height: 16),
                 Text(
-                  'A verification email has been sent to ${widget.email}',
+                  'Email: ${widget.email}',
                   textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodyMedium,
                 ),
                 const SizedBox(height: 16),
-                Text(
-                  'Please check your inbox and spam folder.',
-                  textAlign: TextAlign.center,
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.grey,
-                      ),
-                ),
-                const SizedBox(height: 32),
 
-                // Verification Progress Indicator
-                LinearProgressIndicator(
-                  value: _verificationAttempts / _maxVerificationAttempts,
-                  backgroundColor: Colors.grey[300],
-                  valueColor:
-                      const AlwaysStoppedAnimation<Color>(AppColors.primary),
-                ),
-                const SizedBox(height: 16),
-
-                // Verification Check Button
+                // Send Verification Email Button
                 ElevatedButton(
                   style: ElevatedButton.styleFrom(
                     minimumSize: const Size(double.infinity, 50),
                   ),
-                  onPressed: _isVerifying ? null : _checkEmailVerification,
+                  onPressed: _canResendEmail && !_isVerifying
+                      ? _sendVerificationEmail
+                      : null,
                   child: _isVerifying
                       ? const CircularProgressIndicator.adaptive()
-                      : const Text('Check Verification'),
+                      : Text(_emailSent
+                          ? 'Resend Verification Email'
+                          : 'Send Verification Email'),
                 ),
+
                 const SizedBox(height: 16),
 
-                // Resend Email Button
-                TextButton(
-                  onPressed: _canResendEmail && !_isVerifying
-                      ? _resendVerificationEmail
-                      : null,
-                  child: _canResendEmail
-                      ? const Text('Resend Verification Email')
-                      : Text('Resend in $_remainingSeconds seconds'),
-                ),
+                // Resend Cooldown
+                if (_emailSent && !_canResendEmail)
+                  Text(
+                    'Resend in $_remainingSeconds seconds',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
 
-                // Verification Attempts Display
+                // Verification Progress
+                if (_emailSent)
+                  Column(
+                    children: [
+                      const SizedBox(height: 16),
+                      // Animated Continuous Verification Indicator
+                      RotationTransition(
+                        turns: _animationController,
+                        child: Container(
+                          width: 100,
+                          height: 100,
+                          decoration: BoxDecoration(
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppColors.primary.withOpacity(0.3),
+                              width: 10,
+                            ),
+                          ),
+                          child: Center(
+                            child: Stack(
+                              alignment: Alignment.center,
+                              children: [
+                                CircularProgressIndicator(
+                                  value: _verificationAttempts /
+                                      _maxVerificationAttempts,
+                                  backgroundColor: Colors.grey[300],
+                                  valueColor: AlwaysStoppedAnimation<Color>(
+                                    AppColors.primary.withOpacity(0.7),
+                                  ),
+                                ),
+                                Text(
+                                  '$_verificationAttempts',
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyLarge
+                                      ?.copyWith(
+                                        color: AppColors.primary,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ),
+                      ),
+                      const SizedBox(height: 16),
+                      Text(
+                        'Verification in Progress',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: AppColors.primary,
+                            ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        'Attempts: $_verificationAttempts/$_maxVerificationAttempts',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                              color: Colors.grey,
+                            ),
+                      ),
+                    ],
+                  ),
+
                 const SizedBox(height: 16),
                 Text(
-                  'Verification Attempts: $_verificationAttempts/$_maxVerificationAttempts',
+                  'Please check your inbox and spam folder.',
+                  textAlign: TextAlign.center,
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: Colors.grey,
                       ),
