@@ -47,7 +47,7 @@ dependencies:
   flutter_rating_bar: ^4.0.1
   smooth_page_indicator: ^1.1.0
   intl: ^0.18.1
-  image_picker: ^1.0.0
+  image_picker: ^1.1.2
   
   # Network and API
   http: ^1.1.0

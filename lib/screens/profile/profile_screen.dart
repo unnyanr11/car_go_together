@@ -6,6 +6,7 @@ import '../../services/auth_service.dart';
 import '../../services/database_service.dart';
 import '../auth/login_screen.dart';
 import 'settings_screen.dart';
+import 'aadhar_verification_screen.dart';
 
 class ProfileScreen extends StatefulWidget {
   const ProfileScreen({Key? key}) : super(key: key);
@@ -50,81 +51,50 @@ class _ProfileScreenState extends State<ProfileScreen> {
           _isLoading = false;
         });
       }
-
-      // For demo, create a mock user
-      if (mounted) {
-        final userId =
-            Provider.of<AuthService>(context, listen: false).currentUser?.uid ??
-                '';
-        final displayName = Provider.of<AuthService>(context, listen: false)
-                .currentUser
-                ?.displayName ??
-            'John Doe';
-        final email = Provider.of<AuthService>(context, listen: false)
-                .currentUser
-                ?.email ??
-            'john.doe@example.com';
-
-        setState(() {
-          _user = UserModel(
-            id: userId,
-            email: email,
-            name: displayName,
-            phone: '+92300000000',
-            walletBalance: 1000,
-            rating: 4.5,
-            ratingCount: 10,
-            createdAt: DateTime.now().subtract(const Duration(days: 30)),
-          );
-        });
-      }
     }
   }
 
-  Future<void> _signOut() async {
-    showDialog(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: const Text('Sign Out'),
-        content: const Text('Are you sure you want to sign out?'),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          TextButton(
-            onPressed: () async {
-              Navigator.pop(context);
-
-              try {
-                await Provider.of<AuthService>(context, listen: false)
-                    .signOut();
-
-                if (mounted) {
-                  Navigator.pushAndRemoveUntil(
-                    context,
-                    MaterialPageRoute(
-                      builder: (context) => const LoginScreen(),
-                    ),
-                    (route) => false,
-                  );
-                }
-              } catch (e) {
-                if (mounted) {
-                  ScaffoldMessenger.of(context).showSnackBar(
-                    const SnackBar(
-                      content: Text('Failed to sign out. Please try again.'),
-                      backgroundColor: AppColors.error,
-                    ),
-                  );
-                }
-              }
-            },
-            child: const Text('Sign Out'),
-          ),
-        ],
+  Future<void> _initiateAadharVerification() async {
+    final result = await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => const AadharVerificationScreen(),
       ),
     );
+
+    if (result != null && result is Map<String, dynamic>) {
+      try {
+        final userId = _user?.id;
+        if (userId != null) {
+          await Provider.of<DatabaseService>(context, listen: false)
+              .verifyUserAadhar(userId, result);
+
+          // Reload user profile to reflect changes
+          await _loadUserProfile();
+
+          // Show success message
+          if (mounted) {
+            ScaffoldMessenger.of(context).showSnackBar(
+              SnackBar(
+                content: Text(
+                    'Aadhar verification ${result['isVerified'] ? 'successful' : 'failed'}'),
+                backgroundColor:
+                    result['isVerified'] ? Colors.green : AppColors.error,
+              ),
+            );
+          }
+        }
+      } catch (e) {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(
+              content: Text('Failed to update Aadhar verification: $e'),
+              backgroundColor: AppColors.error,
+            ),
+          );
+        }
+      }
+    }
   }
 
   @override
@@ -154,7 +124,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
               : CustomScrollView(
                   slivers: [
                     SliverAppBar(
-                      expandedHeight: 200,
+                      expandedHeight: 250,
                       pinned: true,
                       flexibleSpace: FlexibleSpaceBar(
                         background: Container(
@@ -191,6 +161,9 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                   fontWeight: FontWeight.bold,
                                 ),
                               ),
+                              const SizedBox(height: 8),
+                              // Aadhar Verification Status
+                              _buildVerificationStatus(),
                             ],
                           ),
                         ),
@@ -215,6 +188,10 @@ class _ProfileScreenState extends State<ProfileScreen> {
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
+                            // Add Aadhar Verification Section
+                            _buildAadharVerificationSection(),
+
+                            const SizedBox(height: 24),
                             _buildProfileSection(
                               title: 'Personal Information',
                               items: [
@@ -226,7 +203,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                 _buildProfileItem(
                                   icon: Icons.phone,
                                   title: 'Phone',
-                                  value: _user?.phoneNumber ?? '',
+                                  value: _user?.phone ?? '',
                                 ),
                                 _buildProfileItem(
                                   icon: Icons.star,
@@ -283,12 +260,6 @@ class _ProfileScreenState extends State<ProfileScreen> {
                                     // Show about app information
                                   },
                                 ),
-                                _buildActionItem(
-                                  icon: Icons.logout,
-                                  title: 'Sign Out',
-                                  onTap: _signOut,
-                                  isDestructive: true,
-                                ),
                               ],
                             ),
                           ],
@@ -297,6 +268,98 @@ class _ProfileScreenState extends State<ProfileScreen> {
                     ),
                   ],
                 ),
+    );
+  }
+
+  Widget _buildVerificationStatus() {
+    final isAadharVerified = _user?.aadharVerification?['status'] == 'verified';
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+      decoration: BoxDecoration(
+        color: isAadharVerified ? Colors.green : Colors.amber,
+        borderRadius: BorderRadius.circular(20),
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(
+            isAadharVerified ? Icons.verified : Icons.warning,
+            color: Colors.white,
+            size: 16,
+          ),
+          const SizedBox(width: 8),
+          Text(
+            isAadharVerified ? 'Verified' : 'Unverified',
+            style: const TextStyle(
+              color: Colors.white,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildAadharVerificationSection() {
+    final isAadharVerified = _user?.aadharVerification?['status'] == 'verified';
+
+    return Container(
+      margin: const EdgeInsets.symmetric(vertical: 16),
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(12),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.grey.withOpacity(0.1),
+            spreadRadius: 1,
+            blurRadius: 5,
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              const Text(
+                'Aadhar Verification',
+                style: TextStyle(
+                  fontSize: 18,
+                  fontWeight: FontWeight.bold,
+                ),
+              ),
+              if (!isAadharVerified)
+                TextButton(
+                  onPressed: _initiateAadharVerification,
+                  child: const Text(
+                    'Verify Now',
+                    style: TextStyle(color: AppColors.primary),
+                  ),
+                ),
+            ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            isAadharVerified
+                ? 'Your Aadhar has been verified'
+                : 'Complete your Aadhar verification to unlock full app features',
+            style: TextStyle(
+              color: isAadharVerified ? Colors.green : Colors.amber[700],
+            ),
+          ),
+          if (isAadharVerified) ...[
+            const SizedBox(height: 12),
+            Text(
+              'Aadhar Number: ${_user?.aadharVerification?['maskedAadharNumber'] ?? 'N/A'}',
+              style: const TextStyle(
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+          ]
+        ],
+      ),
     );
   }
 
@@ -332,8 +395,7 @@ class _ProfileScreenState extends State<ProfileScreen> {
           Container(
             padding: const EdgeInsets.all(8),
             decoration: BoxDecoration(
-              color: AppColors.primary
-                  .withAlpha(26), // Fixed deprecated withOpacity
+              color: AppColors.primary.withAlpha(26),
               borderRadius: BorderRadius.circular(8),
             ),
             child: Icon(
@@ -384,10 +446,8 @@ class _ProfileScreenState extends State<ProfileScreen> {
               padding: const EdgeInsets.all(8),
               decoration: BoxDecoration(
                 color: isDestructive
-                    ? AppColors.error
-                        .withAlpha(26) // Fixed deprecated withOpacity
-                    : AppColors.primary
-                        .withAlpha(26), // Fixed deprecated withOpacity
+                    ? AppColors.error.withAlpha(26)
+                    : AppColors.primary.withAlpha(26),
                 borderRadius: BorderRadius.circular(8),
               ),
               child: Icon(

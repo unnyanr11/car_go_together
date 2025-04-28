@@ -11,7 +11,8 @@ class UserModel {
   final double rating;
   final int ratingCount;
   final DateTime createdAt;
-  final List<LocationModel> savedPlaces; // Add this for saved places
+  final List<LocationModel> savedPlaces;
+  final Map<String, dynamic>? aadharVerification;
 
   UserModel({
     required this.id,
@@ -24,11 +25,17 @@ class UserModel {
     required this.ratingCount,
     required this.createdAt,
     this.savedPlaces = const [],
+    this.aadharVerification,
   });
 
   // Getters for compatibility with ProfileScreen
   String get fullName => name;
   String get phoneNumber => phone;
+
+  // Convenience getters for Aadhar verification
+  bool get isAadharVerified => aadharVerification?['status'] == 'verified';
+
+  String? get maskedAadharNumber => aadharVerification?['maskedAadharNumber'];
 
   factory UserModel.fromMap(Map<String, dynamic> map, String id) {
     List<LocationModel> places = [];
@@ -63,6 +70,7 @@ class UserModel {
           ? (map['createdAt'] as Timestamp).toDate()
           : DateTime.now(),
       savedPlaces: places,
+      aadharVerification: map['aadharVerification'] ?? {},
     );
   }
 
@@ -77,6 +85,7 @@ class UserModel {
       'ratingCount': ratingCount,
       'createdAt': Timestamp.fromDate(createdAt),
       'savedPlaces': savedPlaces.map((place) => place.toMap()).toList(),
+      'aadharVerification': aadharVerification ?? {},
     };
   }
 
@@ -91,6 +100,7 @@ class UserModel {
     int? ratingCount,
     DateTime? createdAt,
     List<LocationModel>? savedPlaces,
+    Map<String, dynamic>? aadharVerification,
   }) {
     return UserModel(
       id: id ?? this.id,
@@ -103,6 +113,18 @@ class UserModel {
       ratingCount: ratingCount ?? this.ratingCount,
       createdAt: createdAt ?? this.createdAt,
       savedPlaces: savedPlaces ?? this.savedPlaces,
+      aadharVerification: aadharVerification ?? this.aadharVerification,
+    );
+  }
+
+  // Optional: Method to update Aadhar verification
+  UserModel updateAadharVerification(Map<String, dynamic> verificationData) {
+    return copyWith(
+      aadharVerification: {
+        'status': verificationData['status'] ?? 'not_verified',
+        'verifiedAt': verificationData['verifiedAt'],
+        'maskedAadharNumber': verificationData['maskedAadharNumber'],
+      },
     );
   }
 }

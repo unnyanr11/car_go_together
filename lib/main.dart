@@ -136,7 +136,6 @@ class MyApp extends StatelessWidget {
       primarySwatch: Colors.green,
       primaryColor: AppColors.primary,
       scaffoldBackgroundColor: Colors.white,
-
       appBarTheme: const AppBarTheme(
         backgroundColor: Colors.white,
         foregroundColor: AppColors.primary,
@@ -144,7 +143,6 @@ class MyApp extends StatelessWidget {
         centerTitle: true,
         iconTheme: IconThemeData(color: AppColors.primary),
       ),
-
       inputDecorationTheme: InputDecorationTheme(
         filled: true,
         fillColor: Colors.grey[100],
@@ -169,7 +167,6 @@ class MyApp extends StatelessWidget {
           borderSide: const BorderSide(color: AppColors.error, width: 2),
         ),
       ),
-
       elevatedButtonTheme: ElevatedButtonThemeData(
         style: ElevatedButton.styleFrom(
           backgroundColor: AppColors.primary,
@@ -183,13 +180,11 @@ class MyApp extends StatelessWidget {
           ),
         ),
       ),
-
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppColors.primary,
         ),
       ),
-
       colorScheme: ColorScheme.fromSwatch(
         primarySwatch: Colors.green,
       ).copyWith(
@@ -203,7 +198,7 @@ class MyApp extends StatelessWidget {
 // Router Configuration (replace previous routing in routes.dart)
 class AppRouter {
   static final GlobalKey<NavigatorState> rootNavigatorKey =
-  GlobalKey<NavigatorState>();
+      GlobalKey<NavigatorState>();
 
   static final GoRouter router = GoRouter(
     navigatorKey: rootNavigatorKey,

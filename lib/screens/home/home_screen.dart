@@ -12,6 +12,7 @@ import '../profile/profile_screen.dart';
 import '../wallet/wallet_screen.dart';
 import 'select_location_screen.dart';
 import 'select_ride_screen.dart';
+import 'sos_emergency_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({Key? key}) : super(key: key);
@@ -242,6 +243,19 @@ class _HomeScreenState extends State<HomeScreen> {
                   context,
                   MaterialPageRoute(
                     builder: (context) => const WalletScreen(),
+                  ),
+                );
+              },
+            ),
+            ListTile(
+              leading: const Icon(Icons.warning, color: Colors.red),
+              title: const Text('Emergency SOS'),
+              onTap: () {
+                Navigator.pop(context);
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(
+                    builder: (context) => const SOSScreen(),
                   ),
                 );
               },

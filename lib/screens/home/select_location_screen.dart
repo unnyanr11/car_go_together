@@ -13,16 +13,17 @@ import '../../models/location_model.dart';
 import '../../services/auth_service.dart';
 
 class SelectLocationScreen extends StatefulWidget {
-  // Use String.fromEnvironment for API key
   static const String googleApiKey = String.fromEnvironment(
       'GOOGLE_MAPS_API_KEY',
       defaultValue: 'fallback_dev_key');
 
   final String title;
+  final bool isDestination;
 
   const SelectLocationScreen({
     Key? key,
     required this.title,
+    this.isDestination = false,
   }) : super(key: key);
 
   @override
@@ -30,34 +31,28 @@ class SelectLocationScreen extends StatefulWidget {
 }
 
 class _SelectLocationScreenState extends State<SelectLocationScreen> {
-  // Logger for better logging
   final _logger = Logger('SelectLocationScreen');
 
-  late GoogleMapController _mapController;
+  GoogleMapController? _mapController;
   final TextEditingController _searchController = TextEditingController();
   final _searchFocusNode = FocusNode();
   final _uuid = const Uuid();
 
-  // Default location set to the specified coordinates
-  static const LatLng _defaultLocation = LatLng(23.0775, 76.8513);
+  // Default location set to a central point
+  static const LatLng _defaultLocation =
+      LatLng(23.0775, 76.8513); // Bhopal coordinates
 
   List<dynamic> _searchResults = [];
   bool _isSearching = false;
   LatLng _selectedPosition = _defaultLocation;
   String _address = '';
-  Set<Marker> _markers = {};
+  final Set<Marker> _markers = {};
   String? _sessionToken;
+  String? _selectedPlaceId;
 
   @override
   void initState() {
     super.initState();
-
-    // Configure logging
-    Logger.root.level = Level.ALL;
-    Logger.root.onRecord.listen((record) {
-      debugPrint('${record.level.name}: ${record.time}: ${record.message}');
-    });
-
     _initializeLocation();
     _searchController.addListener(_onSearchChanged);
   }
@@ -67,30 +62,30 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
     _searchController.removeListener(_onSearchChanged);
     _searchController.dispose();
     _searchFocusNode.dispose();
+    _mapController?.dispose();
     super.dispose();
   }
 
-  void _onSearchChanged() {
-    if (_sessionToken == null) {
-      setState(() {
-        _sessionToken = _uuid.v4();
-      });
-    }
-
-    if (_searchController.text.isNotEmpty) {
-      _searchPlaces(_searchController.text);
-    } else {
-      setState(() {
-        _searchResults = [];
-      });
-    }
+  void _updateMarker() {
+    setState(() {
+      _markers.clear();
+      _markers.add(
+        Marker(
+          markerId: const MarkerId('selected_location'),
+          position: _selectedPosition,
+          infoWindow: InfoWindow(
+            title: _address.isNotEmpty ? _address : 'Selected Location',
+          ),
+        ),
+      );
+    });
   }
 
   Future<void> _initializeLocation() async {
     try {
       bool serviceEnabled = await Geolocator.isLocationServiceEnabled();
 
-      if (serviceEnabled) {
+      if (serviceEnabled && !widget.isDestination) {
         await _getCurrentLocation();
       } else {
         _updateLocationState(_defaultLocation);
@@ -107,15 +102,10 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
     });
 
     try {
-      LocationPermission permission = await _handleLocationPermission();
-
-      if (permission == LocationPermission.denied) {
-        _updateLocationState(_defaultLocation);
-        return;
-      }
-
       Position position = await Geolocator.getCurrentPosition(
-        desiredAccuracy: LocationAccuracy.high,
+        locationSettings: const LocationSettings(
+          accuracy: LocationAccuracy.high,
+        ),
       );
 
       _updateLocationState(
@@ -125,10 +115,25 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
     } catch (e) {
       _logger.warning('Get current location error: $e');
       _updateLocationState(_defaultLocation);
-      _showErrorSnackBar('Error getting current location');
     } finally {
       setState(() {
         _isSearching = false;
+      });
+    }
+  }
+
+  void _onSearchChanged() {
+    if (_sessionToken == null) {
+      setState(() {
+        _sessionToken = _uuid.v4();
+      });
+    }
+
+    if (_searchController.text.isNotEmpty) {
+      _searchPlaces(_searchController.text);
+    } else {
+      setState(() {
+        _searchResults = [];
       });
     }
   }
@@ -163,9 +168,13 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
     }
   }
 
+  String _locationName = '';
+  String _locationCategory = '';
+
   Future<void> _getPlaceDetails(String placeId) async {
     setState(() {
       _isSearching = true;
+      _selectedPlaceId = placeId;
     });
 
     try {
@@ -213,18 +222,14 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
       _getAddressFromLatLng();
     });
 
-    if (shouldAnimateCamera) {
-      _mapController.animateCamera(
+    if (shouldAnimateCamera && _mapController != null) {
+      _mapController!.animateCamera(
         CameraUpdate.newLatLngZoom(position, 15),
       );
     }
   }
 
   Future<void> _getAddressFromLatLng() async {
-    setState(() {
-      _isSearching = true;
-    });
-
     try {
       final placemarks = await geo.placemarkFromCoordinates(
         _selectedPosition.latitude,
@@ -233,11 +238,8 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
 
       if (placemarks.isNotEmpty) {
         final placemark = placemarks.first;
-        final address = _constructAddress(placemark);
-
         setState(() {
-          _address = address;
-          _updateMarker();
+          _address = _constructAddress(placemark);
         });
       } else {
         setState(() {
@@ -245,32 +247,21 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
         });
       }
     } catch (e) {
-      _logger.warning('Geocoding error: $e');
       setState(() {
         _address = 'Unable to retrieve location';
-      });
-    } finally {
-      setState(() {
-        _isSearching = false;
       });
     }
   }
 
   String _constructAddress(geo.Placemark placemark) {
-    final street = placemark.street ?? '';
-    final subLocality = placemark.subLocality ?? '';
-    final locality = placemark.locality ?? '';
-    final administrativeArea = placemark.administrativeArea ?? '';
-    final country = placemark.country ?? '';
-
-    return '$street, $subLocality, $locality, $administrativeArea, $country'
-        .replaceAll(RegExp(r',\s*,'), ',')
-        .replaceAll(RegExp(r'^,\s*|,\s*$'), '');
-  }
-
-  void _onMapTap(LatLng position) {
-    _updateLocationState(position);
-    _getAddressFromLatLng();
+    return [
+      placemark.name,
+      placemark.street,
+      placemark.subLocality,
+      placemark.locality,
+      placemark.administrativeArea,
+      placemark.country
+    ].where((element) => element != null && element.isNotEmpty).join(', ');
   }
 
   void _confirmLocation() {
@@ -283,44 +274,11 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
       address: _address,
       latitude: _selectedPosition.latitude,
       longitude: _selectedPosition.longitude,
-      type: 'other',
+      type: widget.isDestination ? 'destination' : 'pickup',
       createdAt: DateTime.now(),
     );
 
     Navigator.pop(context, location);
-  }
-
-  void _showErrorSnackBar(String message) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text(message),
-        backgroundColor: Colors.red,
-      ),
-    );
-  }
-
-  void _updateMarker() {
-    setState(() {
-      _markers = {
-        Marker(
-          markerId: const MarkerId('selected_location'),
-          position: _selectedPosition,
-          infoWindow: InfoWindow(
-            title: _address.isNotEmpty ? _address : 'Selected Location',
-          ),
-        ),
-      };
-    });
-  }
-
-  Future<LocationPermission> _handleLocationPermission() async {
-    LocationPermission permission = await Geolocator.checkPermission();
-
-    if (permission == LocationPermission.denied) {
-      permission = await Geolocator.requestPermission();
-    }
-
-    return permission;
   }
 
   @override
@@ -329,13 +287,15 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
       appBar: AppBar(
         title: Text(widget.title),
         centerTitle: true,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.my_location),
-            onPressed: _getCurrentLocation,
-            tooltip: 'Use Current Location',
-          ),
-        ],
+        actions: !widget.isDestination
+            ? [
+                IconButton(
+                  icon: const Icon(Icons.my_location),
+                  onPressed: _getCurrentLocation,
+                  tooltip: 'Use Current Location',
+                ),
+              ]
+            : null,
       ),
       body: Stack(
         children: [
@@ -346,19 +306,20 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
               zoom: 15,
             ),
             markers: _markers,
-            onTap: _onMapTap,
+            onTap: (LatLng position) {
+              _updateLocationState(position);
+            },
             myLocationEnabled: true,
             myLocationButtonEnabled: false,
             mapType: MapType.normal,
             zoomControlsEnabled: false,
           ),
           SafeArea(
-            child: Padding(
-              padding: const EdgeInsets.all(16.0),
-              child: Column(
-                children: [
-                  // Search TextField
-                  TextField(
+            child: Column(
+              children: [
+                Padding(
+                  padding: const EdgeInsets.all(16.0),
+                  child: TextField(
                     controller: _searchController,
                     decoration: InputDecoration(
                       hintText: 'Search for a place',
@@ -382,95 +343,80 @@ class _SelectLocationScreenState extends State<SelectLocationScreen> {
                       ),
                     ),
                   ),
+                ),
 
-                  // Search Results
-                  if (_searchResults.isNotEmpty)
-                    Container(
-                      constraints: const BoxConstraints(maxHeight: 200),
-                      decoration: BoxDecoration(
-                        color: Colors.grey.withAlpha(76),
-                        borderRadius: BorderRadius.circular(10),
-                      ),
-                      child: ListView.builder(
-                        shrinkWrap: true,
-                        itemCount: _searchResults.length,
-                        itemBuilder: (context, index) {
-                          final prediction = _searchResults[index];
-                          return ListTile(
-                            title: Text(prediction['description']),
-                            onTap: () {
-                              _getPlaceDetails(prediction['place_id']);
-                              _searchController.text =
-                                  prediction['description'];
-                            },
-                          );
-                        },
-                      ),
-                    ),
-
-                  // Location Details Card
+                // Search Results
+                if (_searchResults.isNotEmpty)
                   Expanded(
-                    child: Align(
-                      alignment: Alignment.bottomCenter,
-                      child: Container(
-                        padding: const EdgeInsets.all(16),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(12),
-                          boxShadow: [
-                            BoxShadow(
-                              color: Colors.grey.withAlpha(76),
-                              spreadRadius: 2,
-                              blurRadius: 5,
-                            ),
-                          ],
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            const Text(
-                              'Selected Location',
-                              style: TextStyle(
-                                fontWeight: FontWeight.bold,
-                                fontSize: 16,
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _address.isNotEmpty
-                                  ? _address
-                                  : 'Tap on map or search a location',
-                              style: const TextStyle(fontSize: 14),
-                            ),
-                            const SizedBox(height: 16),
-                            SizedBox(
-                              width: double.infinity,
-                              child: ElevatedButton(
-                                onPressed: _confirmLocation,
-                                style: ElevatedButton.styleFrom(
-                                  backgroundColor: AppColors.primary,
-                                ),
-                                child: const Text('Confirm Location'),
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
+                    child: ListView.builder(
+                      itemCount: _searchResults.length,
+                      itemBuilder: (context, index) {
+                        final result = _searchResults[index];
+                        return ListTile(
+                          title: Text(result['description']),
+                          onTap: () {
+                            _getPlaceDetails(result['place_id']);
+                            _searchController.text = result['description'];
+                          },
+                        );
+                      },
                     ),
                   ),
-                ],
-              ),
+
+                // Location Details Card
+                Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Colors.white,
+                    borderRadius: BorderRadius.circular(12),
+                    boxShadow: [
+                      BoxShadow(
+                        color: Colors.grey.withAlpha(76),
+                        spreadRadius: 2,
+                        blurRadius: 5,
+                      ),
+                    ],
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        widget.isDestination
+                            ? 'Selected Destination'
+                            : 'Selected Location',
+                        style: const TextStyle(
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      const SizedBox(height: 8),
+                      Text(
+                        _address.isNotEmpty
+                            ? _address
+                            : 'Tap on map or search a location',
+                        style: const TextStyle(fontSize: 14),
+                      ),
+                      const SizedBox(height: 16),
+                      SizedBox(
+                        width: double.infinity,
+                        child: ElevatedButton(
+                          onPressed: _confirmLocation,
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppColors.primary,
+                          ),
+                          child: const Text('Confirm Location'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
             ),
           ),
         ],
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: () {
-          _mapController.animateCamera(
-            CameraUpdate.newLatLngZoom(_selectedPosition, 15),
-          );
-        },
+        onPressed: _getCurrentLocation,
         backgroundColor: Colors.white,
         child: const Icon(
           Icons.my_location,

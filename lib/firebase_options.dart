@@ -66,4 +66,5 @@ class DefaultFirebaseOptions {
     iosClientId: '52407280080-ddj9vgccsjtucfng9m4ldu8d8bp0nkgf.apps.googleusercontent.com',
     iosBundleId: 'com.example.carGoTogether',
   );
+
 }
